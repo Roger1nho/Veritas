@@ -144,9 +144,9 @@ def print_detailed_analysis(score):
     elif score > 0.6:
         verdict = "ATENȚIE: S-au detectat câteva anomalii. Imaginea ar putea fi editată sau scoasă din context."
     elif score > 0.4:
-        verdict = "🤔 NEUTRU: Analiza nu a putut trage o concluzie clară. Nu există semne evidente de manipulare."
+        verdict = "NEUTRU: Analiza nu a putut trage o concluzie clară. Nu există semne evidente de manipulare."
     else:
-        verdict = "PROBABIL AUTENTICĂ: Imaginea pare să fie de bună calitate și fără artefacte suspecte."
+        verdict = "PROBABIL AUTENTICA: Imaginea pare să fie de bună calitate și fără artefacte suspecte."
 
     print(f"VERDICT: {verdict}")
     print("=" * 50)
