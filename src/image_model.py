@@ -151,19 +151,17 @@ def print_detailed_analysis(score):
     print(f"\nSCOR DE SUSPICIUNE: {score:.2f} (adică o probabilitate de {score * 100:.2f}%)")
 
     if score > 0.75:
-        verdict = "🚨 RISC RIDICAT: Imaginea prezintă multiple semne de manipulare sau calitate foarte slabă."
+        verdict = "RISC RIDICAT: Imaginea prezintă multiple semne de manipulare sau calitate foarte slabă."
     elif score > 0.6:
-        verdict = "⚠️ ATENȚIE: S-au detectat câteva anomalii. Imaginea ar putea fi editată sau scoasă din context."
+        verdict = "ATENȚIE: S-au detectat câteva anomalii. Imaginea ar putea fi editată sau scoasă din context."
     elif score > 0.4:
         verdict = "🤔 NEUTRU: Analiza nu a putut trage o concluzie clară. Nu există semne evidente de manipulare."
     else:
-        verdict = "✅ PROBABIL AUTENTICĂ: Imaginea pare să fie de bună calitate și fără artefacte suspecte."
+        verdict = "PROBABIL AUTENTICĂ: Imaginea pare să fie de bună calitate și fără artefacte suspecte."
 
     print(f"VERDICT: {verdict}")
     print("=" * 50)
 
-
-# --- ZONA DE TESTARE ---
 if __name__ == "__main__":
     test_image_path = "C:\\Users\\QUASAR\\Desktop\\Veritas\\images\\ART-1073-1.jpg"
 
