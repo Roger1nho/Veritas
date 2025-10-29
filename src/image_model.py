@@ -18,8 +18,7 @@ def analyze_image(image_path):
     """
     print(f"Analizez imaginea de la: {image_path}")
     try:
-        # Încercăm să deschidem imaginea. Ne asigurăm că e în format RGB,
-        # cel mai comun format, pentru a evita erori la procesare.
+        # Deschidem imaginea in format RGB
         image = Image.open(image_path).convert('RGB')
         print(f"Imagine încărcată cu succes ({image.size[0]}x{image.size[1]} pixeli). Extragerea trasaturilor")
     except Exception as e:
@@ -27,7 +26,7 @@ def analyze_image(image_path):
         # Returnăm un scor neutru daca imaginea nu poate fi citita.
         return 0.5
 
-    # Standardizăm dimensiunea imaginii pentru a ne asigura că analiza este consistentă, indiferent de rezoluția originală.
+    # Standardizam dimensiunea imaginii pentru a ne asigura că analiza este consistentă, indiferent de rezoluția originală.
     # Apoi o convertim într-un format numeric (Tensor) cu care PyTorch poate lucra.
     transform = transforms.Compose([
         transforms.Resize((256, 256)),
