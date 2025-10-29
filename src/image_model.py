@@ -50,25 +50,15 @@ def extract_image_clues(img_tensor, original_image):
     """
     print("\nCaut indicii relevante în imagine:")
 
-    # Fiecare caracteristică țintește un anumit tip de defect posibil.
     features = {
-        # Zgomotul digital poate indica editări sau o calitate slabă a senzorului.
         'noise_level': torch.std(img_tensor).item(),
-        # Imaginile prea întunecate sau prea "spălăcite" pot fi un semnal de alarmă.
         'brightness': torch.mean(img_tensor).item(),
-        # Un contrast foarte scăzut sau exagerat artificial poate sugera manipulare.
         'contrast': torch.var(img_tensor).item(),
-        # Culorile suprasaturate sau, dimpotrivă, anoste, pot indica editări.
         'saturation': compute_saturation(img_tensor),
-        # Contururile clare sunt tipice pozelor de calitate. Cele neclare pot trăda compresii multiple.
         'edge_clarity': compute_edge_strength(img_tensor),
-        # O măsură a cât de "sharp" este imaginea. Fotografiile neclare sunt adesea suspecte.
         'sharpness': estimate_sharpness(original_image),
-        # Compresia JPEG lasă urme (artefacte). O imagine salvată de multe ori va avea urme evidente.
         'jpeg_artifacts': estimate_jpeg_artifacts(original_image)
     }
-
-    # Afișăm ce am găsit, pentru transparență.
     for name, value in features.items():
         print(f"   - {name.replace('_', ' ').capitalize():<20}: {value:.4f}")
 
@@ -84,11 +74,11 @@ def compute_edge_strength(img_tensor):
 
 def estimate_sharpness(image):
     """Estimează claritatea generală (focusul) imaginii."""
-    gray = image.convert("L")  # Analiza clarității e mai simplă pe alb-negru.
+    gray = image.convert("L")  # Analiza claritații e mai simplă pe alb-negru.
     arr = np.array(gray, dtype=np.float32)
     gy, gx = np.gradient(arr)
     variance = np.var(np.sqrt(gx ** 2 + gy ** 2))
-    return float(variance / 10000)  # Normalizăm valoarea pentru a fi mai ușor de interpretat.
+    return float(variance / 10000)  # Normalizam valoarea pentru a fi mai ușor de interpretat.
 
 
 def estimate_jpeg_artifacts(image):
@@ -97,11 +87,11 @@ def estimate_jpeg_artifacts(image):
     Dacă se degradează puțin, înseamnă că era deja foarte comprimată.
     """
     buffer = io.BytesIO()
-    # Salvăm o copie a imaginii în memorie la o calitate scăzută (50).
+    # Salvam o copie a imaginii în memorie la o calitate scăzută (50).
     image.save(buffer, format='JPEG', quality=50)
     recompressed = Image.open(buffer).convert('RGB')
 
-    # Măsurăm diferența medie de pixeli între original și copia degradată.
+    # Măsuram diferenta medie de pixeli intre original si copia degradata.
     diff = np.mean(np.abs(np.array(image, dtype=np.float32) - np.array(recompressed, dtype=np.float32)))
     return float(diff / 255.0)  # Normalizăm la o valoare între 0 și 1.
 
