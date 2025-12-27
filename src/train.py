@@ -1,148 +1,121 @@
 import os
-import pandas as pd
 import torch
 from torch.optim import AdamW
-from torch.utils.data import Dataset, DataLoader
-from transformers import AutoTokenizer, ViTImageProcessor
-from PIL import Image
+from torch.utils.data import DataLoader, random_split
+from torch.nn import CrossEntropyLoss
 from tqdm import tqdm
+from transformers import AutoTokenizer, ViTImageProcessor
 
-# Importăm modelul nostru definit anterior
-# Asigură-te că fișierul fusion_model.py este în același folder (src)
-from fusion_model import VeritasMultimodal
+# Importăm clasele noastre
+from dataset import VeritasDataset
+from fusion_model import MultimodalFakeNewsModel
 
 # --- CONFIGURĂRI ---
-DATA_DIR = r"C:\Veritas\data"
-CSV_FILE = os.path.join(DATA_DIR, "dataset_index.csv")
-BATCH_SIZE = 8  # Câte știri procesează deodată (scade la 4 dacă dă eroare de memorie)
-EPOCHS = 3  # De câte ori trece prin tot setul de date
-LEARNING_RATE = 2e-5  # Viteza de învățare (foarte mică pentru Fine-Tuning)
+BASE_DIR = r"C:\Veritas\data"
+CSV_PATH = os.path.join(BASE_DIR, "dataset_index.csv")
+MODEL_SAVE_PATH = "veritas_model.pth"
+
+BATCH_SIZE = 4  # Mai mic dacă ai erori de memorie
+EPOCHS = 10  # De câte ori trecem prin date (fiind date puține, 10 e ok)
+LEARNING_RATE = 2e-5
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
-print(f"Antrenarea va rula pe: {DEVICE}")
 
-
-# --- 1. CLASA DATASET (Cum citim datele) ---
-class VeritasDataset(Dataset):
-    def __init__(self, csv_file, root_dir):
-        self.df = pd.read_csv(csv_file)
-        self.root_dir = root_dir
-
-        # Încărcăm tokenizerele standard
-        self.tokenizer = AutoTokenizer.from_pretrained("dumitrescustefan/bert-base-romanian-uncased-v1")
-        self.image_processor = ViTImageProcessor.from_pretrained("google/vit-base-patch16-224-in21k")
-
-    def __len__(self):
-        return len(self.df)
-
-    def __getitem__(self, idx):
-        # Luăm rândul curent
-        row = self.df.iloc[idx]
-
-        # 1. Procesare Text
-        text = str(row['text'])
-        text_inputs = self.tokenizer(
-            text,
-            padding="max_length",
-            truncation=True,
-            max_length=128,
-            return_tensors="pt"
-        )
-
-        # 2. Procesare Imagine
-        img_name = row['filename']
-        folder = row['folder']  # 'real' sau 'fake'
-        img_path = os.path.join(self.root_dir, folder, img_name)
-
-        try:
-            image = Image.open(img_path).convert("RGB")
-            pixel_values = self.image_processor(images=image, return_tensors="pt").pixel_values
-        except Exception as e:
-            # Dacă imaginea e coruptă, returnăm o imagine neagră (fallback)
-            print(f"Eroare la imaginea {img_path}: {e}")
-            image = Image.new('RGB', (224, 224), color='black')
-            pixel_values = self.image_processor(images=image, return_tensors="pt").pixel_values
-
-        # 3. Label (Eticheta)
-        label = torch.tensor(row['label'], dtype=torch.long)
-
-        return {
-            'input_ids': text_inputs['input_ids'].squeeze(0),  # Eliminăm dimensiunea extra [1, 128] -> [128]
-            'attention_mask': text_inputs['attention_mask'].squeeze(0),
-            'pixel_values': pixel_values.squeeze(0),  # [1, 3, 224, 224] -> [3, 224, 224]
-            'labels': label
-        }
-
-
-# --- 2. LOOP-UL DE ANTRENARE ---
 def train():
-    # Inițializăm Dataset-ul și DataLoader-ul
-    if not os.path.exists(CSV_FILE):
-        print("EROARE: Nu găsesc dataset_index.csv! Rulează mai întâi 'prepare_data.py'.")
-        return
+    print(f"🚀 Pornire antrenare pe: {DEVICE.upper()}")
 
-    dataset = VeritasDataset(CSV_FILE, DATA_DIR)
-    # Shuffle=True amestecă datele ca modelul să nu memoreze ordinea
-    dataloader = DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=True)
+    # 1. Încărcare Tokenizer și Procesor
+    print("⏳ Încărcare modele pre-antrenate...")
+    tokenizer = AutoTokenizer.from_pretrained("dumitrescustefan/bert-base-romanian-cased-v1")
+    image_processor = ViTImageProcessor.from_pretrained("google/vit-base-patch16-224-in21k")
 
-    # Inițializăm Modelul
-    model = VeritasMultimodal()
+    # 2. Încărcare Dataset
+    full_dataset = VeritasDataset(
+        csv_file=CSV_PATH,
+        root_dir=BASE_DIR,
+        tokenizer=tokenizer,
+        image_processor=image_processor
+    )
+
+    # Împărțim datele: 80% antrenare, 20% validare
+    train_size = int(0.8 * len(full_dataset))
+    val_size = len(full_dataset) - train_size
+    train_dataset, val_dataset = random_split(full_dataset, [train_size, val_size])
+
+    train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True)
+    val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE)
+
+    print(f"✅ Date încărcate: {len(full_dataset)} total ({len(train_dataset)} Train, {len(val_dataset)} Val)")
+
+    # 3. Inițializare Model
+    model = MultimodalFakeNewsModel(num_labels=2)
     model.to(DEVICE)
-    model.train()  # Punem modelul în mod "antrenare" (activează Dropout etc.)
 
-    # Optimizator (Algoritmul care ajustează ponderile)
     optimizer = AdamW(model.parameters(), lr=LEARNING_RATE)
+    criterion = CrossEntropyLoss()
 
-    # Funcția de pierdere (Loss function)
-    criterion = torch.nn.CrossEntropyLoss()
-
-    print(f"\nÎncepe antrenarea pentru {len(dataset)} exemple...")
-
+    # 4. Bucla de Antrenare
     for epoch in range(EPOCHS):
+        model.train()
         total_loss = 0
-        correct_predictions = 0
+        correct_train = 0
+        total_train = 0
 
-        progress_bar = tqdm(dataloader, desc=f"Epoca {epoch + 1}/{EPOCHS}")
+        loop = tqdm(train_loader, desc=f"Epoca {epoch + 1}/{EPOCHS}")
 
-        for batch in progress_bar:
-            # Mutăm datele pe GPU/CPU
+        for batch in loop:
+            # Mutăm pe GPU
             input_ids = batch['input_ids'].to(DEVICE)
             attention_mask = batch['attention_mask'].to(DEVICE)
             pixel_values = batch['pixel_values'].to(DEVICE)
             labels = batch['labels'].to(DEVICE)
 
-            # 1. Resetăm gradienții (vechi)
+            # Forward
             optimizer.zero_grad()
-
-            # 2. Forward Pass (Modelul face o predicție)
             outputs = model(input_ids, attention_mask, pixel_values)
-
-            # 3. Calculăm eroarea (Loss)
             loss = criterion(outputs, labels)
 
-            # 4. Backward Pass (Calculăm corecțiile necesare)
+            # Backward
             loss.backward()
-
-            # 5. Update (Aplicăm corecțiile)
             optimizer.step()
 
-            # Statistici
             total_loss += loss.item()
+
+            # Calcul acuratețe antrenare
             preds = torch.argmax(outputs, dim=1)
-            correct_predictions += torch.sum(preds == labels).item()
+            correct_train += (preds == labels).sum().item()
+            total_train += labels.size(0)
 
-            # Update bară progres
-            progress_bar.set_postfix({'loss': loss.item()})
+            loop.set_postfix(loss=loss.item())
 
-        # Final de epocă
-        avg_loss = total_loss / len(dataloader)
-        accuracy = correct_predictions / len(dataset)
-        print(f"\nEpoca {epoch + 1} terminată. Loss Mediu: {avg_loss:.4f} | Acuratețe: {accuracy * 100:.2f}%")
+        # 5. Validare (Testăm pe datele nevăzute)
+        model.eval()
+        correct_val = 0
+        total_val = 0
 
-    # --- SALVAREA MODELULUI ---
-    save_path = "veritas_model_v1.pth"
-    torch.save(model.state_dict(), save_path)
-    print(f"\nModel antrenat salvat cu succes în '{save_path}'!")
+        with torch.no_grad():
+            for batch in val_loader:
+                input_ids = batch['input_ids'].to(DEVICE)
+                attention_mask = batch['attention_mask'].to(DEVICE)
+                pixel_values = batch['pixel_values'].to(DEVICE)
+                labels = batch['labels'].to(DEVICE)
+
+                outputs = model(input_ids, attention_mask, pixel_values)
+                preds = torch.argmax(outputs, dim=1)
+
+                correct_val += (preds == labels).sum().item()
+                total_val += labels.size(0)
+
+        train_acc = correct_train / total_train
+        val_acc = correct_val / total_val if total_val > 0 else 0
+
+        print(
+            f"📊 Epoca {epoch + 1}: Loss={total_loss / len(train_loader):.4f} | Train Acc={train_acc:.2%} | Val Acc={val_acc:.2%}")
+
+    # 6. Salvare
+    print(f"💾 Salvare model în {MODEL_SAVE_PATH}...")
+    torch.save(model.state_dict(), MODEL_SAVE_PATH)
+    print("🎉 Antrenare completă!")
 
 
 if __name__ == "__main__":
