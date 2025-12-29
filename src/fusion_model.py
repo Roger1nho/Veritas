@@ -17,28 +17,40 @@ class MultimodalFakeNewsModel(nn.Module):
         text_dim = self.text_encoder.config.hidden_size  # 768
         image_dim = self.image_encoder.config.hidden_size  # 768
 
+        self.image_projection = nn.Linear(image_dim, text_dim)
+
+        self.gate_layer = nn.Sequential(
+            nn.Linear(text_dim + text_dim, 1),
+            nn.Sigmoid()
+        )
+
         # 4. Clasificator Final (Fuziune)
         # Combinăm vectorii (768 + 768 = 1536)
         self.classifier = nn.Sequential(
-            nn.Linear(text_dim + image_dim, 512),
+            nn.Linear(text_dim, 512),
             nn.ReLU(),
             nn.Dropout(0.3),  # Previne memorarea mecanică
             nn.Linear(512, num_labels)
         )
 
     def forward(self, input_ids, attention_mask, pixel_values):
-        # A. Extragem trăsături TEXT
-        text_outputs = self.text_encoder(input_ids=input_ids, attention_mask=attention_mask)
-        text_emb = text_outputs.pooler_output  # Reprezentarea frazei (Vector 768)
+        # 1. Features
+        text_emb = self.text_encoder(input_ids=input_ids, attention_mask=attention_mask).pooler_output
+        image_emb = self.image_encoder(pixel_values=pixel_values).pooler_output
 
-        # B. Extragem trăsături IMAGINE
-        image_outputs = self.image_encoder(pixel_values=pixel_values)
-        image_emb = image_outputs.pooler_output  # Reprezentarea imaginii (Vector 768)
+        # 2. Aliniem dimensiunile (Image -> Text Space)
+        image_emb_proj = self.image_projection(image_emb)
 
-        # C. CONCATENARE (Fuziune)
-        combined_features = torch.cat((text_emb, image_emb), dim=1)
+        # 3. Calculăm "Gating Weight" (z)
+        # Ne uităm la ambele și decidem cât contează imaginea în contextul acestui text
+        concat_features = torch.cat((text_emb, image_emb_proj), dim=1)
+        z = self.gate_layer(concat_features) # z va fi un scalar per exemplu (ex: 0.2)
 
-        # D. CLASIFICARE (Real vs Fake)
-        logits = self.classifier(combined_features)
+        # 4. Fuziune Ponderată
+        # Formula: Final = Text + (z * Image)
+        # Dacă z e mic, imaginea e ignorată. Dacă z e mare, imaginea influențează decizia.
+        fused_embedding = text_emb + (z * image_emb_proj)
+
+        logits = self.classifier(fused_embedding)
 
         return logits

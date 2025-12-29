@@ -138,7 +138,7 @@ start_analysis = False
 
 # --- TAB 1: AUTOMAT ---
 with tab1:
-    st.info("Lipește un link de la Digi24, Recorder sau un site de satiră.")
+    st.info("Da paste la linkul oricarui articol scris in romana.")
     col_url, col_btn = st.columns([3, 1])
     with col_url:
         url_input = st.text_input("URL Articol", label_visibility="collapsed", placeholder="https://...")
@@ -198,7 +198,7 @@ if start_analysis and final_text and final_image:
                 return_tensors="pt",
                 truncation=True,
                 padding="max_length",
-                max_length=128
+                max_length=512
             )
 
             # 2. Procesare Imagine

@@ -10,13 +10,12 @@ from transformers import AutoTokenizer, ViTImageProcessor
 from dataset import VeritasDataset
 from fusion_model import MultimodalFakeNewsModel
 
-# --- CONFIGURĂRI ---
 BASE_DIR = r"C:\Veritas\data"
 CSV_PATH = os.path.join(BASE_DIR, "dataset_index.csv")
 MODEL_SAVE_PATH = "veritas_model.pth"
 
-BATCH_SIZE = 4  # Mai mic dacă ai erori de memorie
-EPOCHS = 10  # De câte ori trecem prin date (fiind date puține, 10 e ok)
+BATCH_SIZE = 2
+EPOCHS = 4  # De câte ori trecem prin date (fiind date puține, 10 e ok)
 LEARNING_RATE = 2e-5
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -34,7 +33,8 @@ def train():
         csv_file=CSV_PATH,
         root_dir=BASE_DIR,
         tokenizer=tokenizer,
-        image_processor=image_processor
+        image_processor=image_processor,
+        is_train=True
     )
 
     # Împărțim datele: 80% antrenare, 20% validare

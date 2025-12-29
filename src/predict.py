@@ -4,7 +4,7 @@ from PIL import Image
 import requests
 from io import BytesIO
 import os
-from fusion_model import VeritasMultimodal
+from fusion_model import MultimodalFakeNewsModel
 
 # --- CONFIGURARE ---
 BASE_DIR = r"C:\Veritas"
@@ -19,7 +19,7 @@ def load_trained_model():
     if not os.path.exists(MODEL_PATH):
         raise FileNotFoundError(f"Nu găsesc modelul la: {MODEL_PATH}. Rulează train.py întâi!")
 
-    model = VeritasMultimodal()
+    model = MultimodalFakeNewsModel()
 
     # Încărcare cu map_location pentru a evita erori GPU/CPU
     state_dict = torch.load(MODEL_PATH, map_location=DEVICE)
