@@ -46,13 +46,13 @@ def scrape_and_save(url, label, index):
         if len(text_content) < 100:
             return None
 
-        clean_paragraphs = []
-        for p in paragraphs:
-            text = p.get_text().strip()
-            if len(text) > 30:
-                clean_paragraphs.append(text)
+        # clean_paragraphs = []
+        # for p in paragraphs:
+        #     text = p.get_text().strip()
+        #     if len(text) > 30:
+        #         clean_paragraphs.append(text)
 
-        text_content = " ".join(clean_paragraphs)
+        # text_content = " ".join(clean_paragraphs)
 
         # Eliminăm limita de caractere complet!
         full_text = f"{title}. {text_content}"
