@@ -5,8 +5,6 @@ from torch.utils.data import DataLoader, random_split
 from torch.nn import CrossEntropyLoss
 from tqdm import tqdm
 from transformers import AutoTokenizer, ViTImageProcessor
-
-# Importăm clasele noastre
 from dataset import VeritasDataset
 from fusion_model import MultimodalFakeNewsModel
 
@@ -15,7 +13,7 @@ CSV_PATH = os.path.join(BASE_DIR, "dataset_index.csv")
 MODEL_SAVE_PATH = "veritas_model.pth"
 
 BATCH_SIZE = 2
-EPOCHS = 4  # De câte ori trecem prin date (fiind date puține, 10 e ok)
+EPOCHS = 4  # De câte ori trecem prin date
 LEARNING_RATE = 2e-5
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -23,12 +21,12 @@ DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 def train():
     print(f"🚀 Pornire antrenare pe: {DEVICE.upper()}")
 
-    # 1. Încărcare Tokenizer și Procesor
+    #Încărcare Tokenizer și Procesor
     print("⏳ Încărcare modele pre-antrenate...")
     tokenizer = AutoTokenizer.from_pretrained("dumitrescustefan/bert-base-romanian-cased-v1")
     image_processor = ViTImageProcessor.from_pretrained("google/vit-base-patch16-224-in21k")
 
-    # 2. Încărcare Dataset
+    #Încărcare Dataset
     full_dataset = VeritasDataset(
         csv_file=CSV_PATH,
         root_dir=BASE_DIR,
@@ -47,14 +45,14 @@ def train():
 
     print(f"✅ Date încărcate: {len(full_dataset)} total ({len(train_dataset)} Train, {len(val_dataset)} Val)")
 
-    # 3. Inițializare Model
+    #Inițializare Model
     model = MultimodalFakeNewsModel(num_labels=2)
     model.to(DEVICE)
 
     optimizer = AdamW(model.parameters(), lr=LEARNING_RATE)
     criterion = CrossEntropyLoss()
 
-    # 4. Bucla de Antrenare
+    #Bucla de Antrenare
     for epoch in range(EPOCHS):
         model.train()
         total_loss = 0
@@ -88,7 +86,7 @@ def train():
 
             loop.set_postfix(loss=loss.item())
 
-        # 5. Validare (Testăm pe datele nevăzute)
+        #Validare (Testăm pe datele nevăzute)
         model.eval()
         correct_val = 0
         total_val = 0
@@ -112,7 +110,7 @@ def train():
         print(
             f"📊 Epoca {epoch + 1}: Loss={total_loss / len(train_loader):.4f} | Train Acc={train_acc:.2%} | Val Acc={val_acc:.2%}")
 
-    # 6. Salvare
+    #Salvare
     print(f"💾 Salvare model în {MODEL_SAVE_PATH}...")
     torch.save(model.state_dict(), MODEL_SAVE_PATH)
     print("🎉 Antrenare completă!")

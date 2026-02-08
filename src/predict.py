@@ -6,7 +6,6 @@ from io import BytesIO
 import os
 from fusion_model import MultimodalFakeNewsModel
 
-# --- CONFIGURARE ---
 BASE_DIR = r"C:\Veritas"
 MODEL_PATH = os.path.join(BASE_DIR, "veritas_model_v1.pth")
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
@@ -15,13 +14,11 @@ DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 def load_trained_model():
     print(f"Se încarcă modelul de pe {DEVICE}...")
 
-    # Verificăm dacă modelul există
     if not os.path.exists(MODEL_PATH):
         raise FileNotFoundError(f"Nu găsesc modelul la: {MODEL_PATH}. Rulează train.py întâi!")
 
     model = MultimodalFakeNewsModel()
 
-    # Încărcare cu map_location pentru a evita erori GPU/CPU
     state_dict = torch.load(MODEL_PATH, map_location=DEVICE)
     model.load_state_dict(state_dict)
 
@@ -34,10 +31,9 @@ def predict(model, text, image_source):
     tokenizer = AutoTokenizer.from_pretrained("dumitrescustefan/bert-base-romanian-uncased-v1")
     image_processor = ViTImageProcessor.from_pretrained("google/vit-base-patch16-224-in21k")
 
-    # --- 1. Încărcare Imagine ---
     image = None
 
-    # CAZ A: Imagine de pe internet (URL)
+    # Imagine de pe internet
     if image_source.startswith("http"):
         try:
             # Adăugăm headers ca să nu fim blocați de site-uri
@@ -51,7 +47,7 @@ def predict(model, text, image_source):
             print(f"❌ EROARE la descărcarea imaginii: {e}")
             return
 
-    # CAZ B: Imagine locală (Cale din PC)
+    # Imagine locală
     else:
         if os.path.exists(image_source):
             try:
@@ -64,7 +60,6 @@ def predict(model, text, image_source):
             print(f"❌ EROARE: Fișierul nu există: {image_source}")
             return
 
-    # --- 2. Procesare Model ---
     text_inputs = tokenizer(text, return_tensors="pt", truncation=True, padding="max_length", max_length=128)
     image_inputs = image_processor(images=image, return_tensors="pt")
 
@@ -79,7 +74,6 @@ def predict(model, text, image_source):
     fake_prob = probs[0][1].item()
     real_prob = probs[0][0].item()
 
-    # --- 3. Rezultat ---
     print("\n" + "=" * 50)
     print(f"REZULTAT VERITAS")
     print("=" * 50)
@@ -96,12 +90,9 @@ def predict(model, text, image_source):
 if __name__ == "__main__":
     try:
         model = load_trained_model()
-
-        # --- TEST SIGUR (Folosind imaginile descărcate deja) ---
-        # Caută o imagine care există sigur în folderul tău de date
         data_path = r"C:\Veritas\data"
 
-        # Încercăm să găsim automat o imagine 'fake' și una 'real' din ce ai descărcat
+        # găsim automat o imagine 'fake' și una 'real'
         real_img_path = None
         fake_img_path = None
 
@@ -120,7 +111,6 @@ if __name__ == "__main__":
         if fake_img_path:
             predict(model, "Extratereștrii au invadat pământul și vând covrigi.", fake_img_path)
 
-        # --- TEST OPTIONAL ONLINE ---
         print("\n--- TEST ONLINE (Google Logo) ---")
         predict(model, "Google a lansat un nou motor de căutare.",
                 "https://www.google.com/images/branding/googlelogo/1x/googlelogo_color_272x92dp.png")

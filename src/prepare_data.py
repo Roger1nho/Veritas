@@ -5,8 +5,8 @@ import pandas as pd
 from PIL import Image
 from io import BytesIO
 import time
+import trafilatura
 
-# --- CONFIGURARE ---
 BASE_DIR = r"C:\Veritas\data"
 REAL_SOURCES_PATH = r"C:\Veritas\real_sources.csv"
 FAKE_SOURCES_PATH = r"C:\Veritas\fake_sources.csv"
@@ -17,64 +17,41 @@ os.makedirs(os.path.join(BASE_DIR, "fake"), exist_ok=True)
 
 
 def scrape_and_save(url, label, index):
-    """
-    Descarcă articolul, salvează imaginea și returnează datele pentru CSV-ul final.
-    Label: 0 = Real, 1 = Fake
-    """
     try:
-        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/91.0'}
-        response = requests.get(url, headers=headers, timeout=10)
-
-        # Verificăm dacă link-ul e valid
-        if response.status_code != 200:
-            print(f"⚠️ [SKIP] {url} - Cod {response.status_code}")
+        #Folosim Trafilatura pentru descărcare și extragere
+        downloaded = trafilatura.fetch_url(url)
+        if not downloaded:
+            print(f"⚠️ [SKIP] {url} - Nu s-a putut descărca.")
             return None
 
-        soup = BeautifulSoup(response.content, 'html.parser')
+        # Extragem textul "curat"
+        text_content = trafilatura.extract(downloaded, include_comments=False)
+        metadata = trafilatura.extract_metadata(downloaded)
 
-        # 1. Extragere Titlu
-        title_tag = soup.find('h1')
-        if not title_tag:
-            return None
-        title = title_tag.get_text().strip()
-
-        # 2. Extragere Text (paragrafe)
-        paragraphs = soup.find_all('p')
-        text_content = " ".join([p.get_text() for p in paragraphs])
-        text_content = " ".join(text_content.split())  # Curățare spații
-
-        if len(text_content) < 100:
+        if not text_content or len(text_content) < 100:
             return None
 
-        # clean_paragraphs = []
-        # for p in paragraphs:
-        #     text = p.get_text().strip()
-        #     if len(text) > 30:
-        #         clean_paragraphs.append(text)
-
-        # text_content = " ".join(clean_paragraphs)
-
-        # Eliminăm limita de caractere complet!
+        title = metadata.title if metadata and metadata.title else ""
         full_text = f"{title}. {text_content}"
 
-        # 3. Extragere Imagine
-        image_url = ""
-        meta_image = soup.find('meta', property='og:image')
-        if meta_image:
-            image_url = meta_image['content']
-        else:
-            img = soup.find('img')
-            if img and 'src' in img.attrs:
-                image_url = img['src']
+        # Curățăm caracterele invizibile
+        full_text = " ".join(full_text.split())
+
+        # 2. Extragere Imagine
+        image_url = metadata.image if metadata else None
+
+        # Fallback imagine (dacă trafilatura nu găsește)
+        if not image_url:
+            pass
 
         if not image_url or not image_url.startswith('http'):
             return None
 
-        # Descărcare imagine
+        #Descărcare și Salvare
+        headers = {'User-Agent': 'Mozilla/5.0'}
         img_resp = requests.get(image_url, headers=headers, timeout=5)
         img = Image.open(BytesIO(img_resp.content)).convert('RGB')
 
-        # Salvare Imagine
         filename = f"{'real' if label == 0 else 'fake'}_{index}.jpg"
         folder_name = "real" if label == 0 else "fake"
         save_path = os.path.join(BASE_DIR, folder_name, filename)
@@ -110,8 +87,6 @@ def process_csv(csv_path, label):
 
     for i, row in df.iterrows():
         url = row['url']
-        # Folosim indexul global pentru a nu suprascrie fișierele dacă rulăm de mai multe ori
-        # (Aici folosim 'i' simplu, dar ai grijă să ștergi folderul 'data' dacă reiei de la zero)
         data = scrape_and_save(url, label, i)
         if data:
             results.append(data)
@@ -123,15 +98,15 @@ def process_csv(csv_path, label):
 def main():
     all_data = []
 
-    # 1. Procesăm Real (Label 0)
+    #Procesăm Real (Label 0)
     real_data = process_csv(REAL_SOURCES_PATH, label=0)
     all_data.extend(real_data)
 
-    # 2. Procesăm Fake (Label 1)
+    #Procesăm Fake (Label 1)
     fake_data = process_csv(FAKE_SOURCES_PATH, label=1)
     all_data.extend(fake_data)
 
-    # 3. Salvare Dataset Final
+    #Salvare Dataset Final
     if all_data:
         df_final = pd.DataFrame(all_data)
         csv_path = os.path.join(BASE_DIR, "dataset_index.csv")

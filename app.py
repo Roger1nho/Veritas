@@ -8,29 +8,27 @@ import sys
 import requests
 from bs4 import BeautifulSoup
 from io import BytesIO
+import trafilatura
 
-# --- CONFIGURARE PAGINĂ ---
+
 st.set_page_config(
     page_title="Veritas - Detector Fake News",
     page_icon="🕵️",
     layout="wide"
 )
 
-# --- 1. REPARARE CĂI (IMPORT CRITIC) ---
 # Adăugăm folderul 'src' la calea sistemului pentru a găsi fusion_model.py
 current_dir = os.path.dirname(os.path.abspath(__file__))
 src_dir = os.path.join(current_dir, 'src')
 if src_dir not in sys.path:
     sys.path.append(src_dir)
 
-# Acum putem importa clasa corectă
 try:
     from fusion_model import MultimodalFakeNewsModel
 except ImportError:
     st.error("❌ Nu găsesc fișierul 'src/fusion_model.py'. Asigură-te că folderul 'src' este lângă 'app.py'.")
     st.stop()
 
-# --- CONFIGURĂRI MODEL ---
 # Folosim calea relativă pentru portabilitate
 MODEL_PATH = "src/veritas_model.pth"
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
@@ -56,7 +54,6 @@ def load_veritas_model():
     model.to(DEVICE)
     model.eval()
 
-    # ATENȚIE: Folosim 'cased' pentru că așa am antrenat!
     tokenizer = AutoTokenizer.from_pretrained("dumitrescustefan/bert-base-romanian-cased-v1")
     processor = ViTImageProcessor.from_pretrained("google/vit-base-patch16-224-in21k")
 
@@ -65,68 +62,70 @@ def load_veritas_model():
 
 def scrape_article(url):
     """
-    Extrage textul și imaginea principală dintr-un URL.
+    Extrage textul CURAT și imaginea principală dintr-un URL folosind Trafilatura.
     """
-    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/91.0.4472.124 Safari/537.36'}
-
     try:
-        response = requests.get(url, headers=headers, timeout=10)
-        if response.status_code != 200:
-            return None, None, f"Eroare accesare site: Cod {response.status_code}"
+        downloaded = trafilatura.fetch_url(url)
 
-        soup = BeautifulSoup(response.content, 'html.parser')
+        if downloaded is None:
+            return None, None, "Nu am putut accesa site-ul (blocaj sau link invalid)."
 
-        # 1. Extragere Titlu
-        title = soup.find('h1')
-        title_text = title.get_text().strip() if title else ""
+        # include_comments=False asigură că nu luăm comentariile userilor
+        text_content = trafilatura.extract(downloaded, include_comments=False, include_tables=False)
 
-        # 2. Extragere Text
-        paragraphs = soup.find_all('p')
-        text_content = " ".join([p.get_text() for p in paragraphs])
+        if not text_content or len(text_content) < 50:
+            return None, None, "Text insuficient extras. Site-ul poate avea protecție avansată."
 
-        if len(text_content) < 50:
-            return None, None, "Text insuficient extras. Site-ul poate avea protecție anti-bot."
+        # Trafilatura poate extrage și metadate, dar uneori e bine să facem fallback pe BeautifulSoup pentru imagine
+        import json
+        metadata = trafilatura.extract_metadata(downloaded)
 
-        # 3. Extragere Imagine
-        image_url = ""
-        meta_image = soup.find('meta', property='og:image')
-        if meta_image:
-            image_url = meta_image['content']
-        else:
-            img_tag = soup.find('img')
-            if img_tag and 'src' in img_tag.attrs:
-                image_url = img_tag['src']
+        title_text = metadata.title if metadata and metadata.title else ""
 
-        # Descărcăm imaginea
+        # Încercăm să luăm imaginea găsită de Trafilatura
+        image_url = metadata.image if metadata and metadata.image else ""
+
+        if not image_url:
+            headers = {'User-Agent': 'Mozilla/5.0'}
+            # Facem un request separat doar pentru a parsa HTML-ul pentru og:image
+            try:
+                r = requests.get(url, headers=headers, timeout=5)
+                soup = BeautifulSoup(r.content, 'html.parser')
+                meta_image = soup.find('meta', property='og:image')
+                if meta_image:
+                    image_url = meta_image['content']
+            except:
+                pass
+
         pil_image = None
         if image_url:
-            if not image_url.startswith('http'):
-                from urllib.parse import urljoin
-                image_url = urljoin(url, image_url)
-
             try:
+                if not image_url.startswith('http'):
+                    from urllib.parse import urljoin
+                    image_url = urljoin(url, image_url)
+
+                headers = {'User-Agent': 'Mozilla/5.0'}
                 img_resp = requests.get(image_url, headers=headers, timeout=5)
                 pil_image = Image.open(BytesIO(img_resp.content)).convert("RGB")
-            except:
-                pil_image = None  # Imaginea nu a putut fi descărcată
+            except Exception as e:
+                print(f"Eroare download imagine: {e}")
+                pil_image = None
 
-        full_text = f"{title_text}. {text_content[:2000]}"
+        # Construim textul final pentru model
+        full_text = f"{title_text}. {text_content}"
+
         return full_text, pil_image, None
 
     except Exception as e:
         return None, None, f"Eroare generală: {str(e)}"
 
-
-# --- INTERFAȚA GRAFICĂ ---
-
-# Încărcare resurse
 model, tokenizer, image_processor = load_veritas_model()
 
 if not model:
     st.stop()
 
 st.title("🕵️ Veritas: Analiză Automată Știri")
-st.markdown("**Sistem de Licență** - Detecție Multimodală (Text + Imagine)")
+st.markdown("Detecție Multimodală")
 st.markdown("---")
 
 # TAB-uri
@@ -136,7 +135,6 @@ final_image = None
 final_text = None
 start_analysis = False
 
-# --- TAB 1: AUTOMAT ---
 with tab1:
     st.info("Da paste la linkul oricarui articol scris in romana.")
     col_url, col_btn = st.columns([3, 1])
@@ -172,7 +170,8 @@ with tab1:
                     with c2:
                         st.text_area("Text Identificat", final_text, height=200)
 
-# --- TAB 2: MANUAL ---
+
+
 with tab2:
     uploaded_file = st.file_uploader("Încarcă o imagine", type=["jpg", "png", "jpeg"])
     manual_text = st.text_area("Scrie textul știrii aici", height=150)
@@ -185,14 +184,15 @@ with tab2:
         else:
             st.warning("Te rog încarcă și imaginea și textul.")
 
-# --- ANALIZA FINALĂ ---
+
+
 if start_analysis and final_text and final_image:
     st.markdown("---")
     st.subheader("🔍 Rezultat Analiză Veritas")
 
     with st.spinner("Procesare neuroni (BERT + ViT)..."):
         try:
-            # 1. Procesare Text
+            #Procesare Text
             text_inputs = tokenizer(
                 final_text,
                 return_tensors="pt",
@@ -201,15 +201,15 @@ if start_analysis and final_text and final_image:
                 max_length=512
             )
 
-            # 2. Procesare Imagine
+            #Procesare Imagine
             image_inputs = image_processor(images=final_image, return_tensors="pt")
 
-            # 3. Mutare pe GPU/CPU
+            #Mutare pe GPU/CPU
             input_ids = text_inputs['input_ids'].to(DEVICE)
             attention_mask = text_inputs['attention_mask'].to(DEVICE)
             pixel_values = image_inputs['pixel_values'].to(DEVICE)
 
-            # 4. Inferență
+            #Inferență
             with torch.no_grad():
                 logits = model(input_ids, attention_mask, pixel_values)
                 probs = F.softmax(logits, dim=1)
