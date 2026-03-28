@@ -33,19 +33,17 @@ class MultimodalFakeNewsModel(nn.Module):
         )
 
     def forward(self, input_ids, attention_mask, pixel_values):
-        #Features
+        # Features
         text_emb = self.text_encoder(input_ids=input_ids, attention_mask=attention_mask).pooler_output
         image_emb = self.image_encoder(pixel_values=pixel_values).pooler_output
         image_emb_proj = self.image_projection(image_emb)
 
         concat_features = torch.cat((text_emb, image_emb_proj), dim=1)
-        z = self.gate_layer(concat_features)
+        z = self.gate_layer(concat_features) # <-- ACEASTA ESTE PONDEREA IMAGINII
 
-        #Fuziune Ponderată
-        # Formula: Final = Text + (z * Image)
-        # Dacă z e mic, imaginea e ignorată. Dacă z e mare, imaginea influențează decizia.
+        # Fuziune Ponderată
         fused_embedding = text_emb + (z * image_emb_proj)
-
         logits = self.classifier(fused_embedding)
 
-        return logits
+        # Returnăm atât predicția, cât și 'z' pentru statistici XAI
+        return logits, z

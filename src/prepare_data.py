@@ -21,7 +21,7 @@ def scrape_and_save(url, label, index):
         #Folosim Trafilatura pentru descărcare și extragere
         downloaded = trafilatura.fetch_url(url)
         if not downloaded:
-            print(f"⚠️ [SKIP] {url} - Nu s-a putut descărca.")
+            print(f"{url} - Nu s-a putut descărca.")
             return None
 
         # Extragem textul "curat"

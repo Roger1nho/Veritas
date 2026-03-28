@@ -3,7 +3,7 @@ import torch
 import pandas as pd
 from PIL import Image
 from torch.utils.data import Dataset
-from torchvision import transforms  # <--- IMPORT NOU ESENȚIAL
+from torchvision import transforms
 
 
 class VeritasDataset(Dataset):
