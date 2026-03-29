@@ -8,7 +8,7 @@ class MultimodalFakeNewsModel(nn.Module):
         super(MultimodalFakeNewsModel, self).__init__()
 
         #Modul Text: BERT Românesc
-        self.text_encoder = AutoModel.from_pretrained("dumitrescustefan/bert-base-romanian-cased-v1")
+        self.text_encoder = AutoModel.from_pretrained("bert-base-uncased")
 
         #Modul Imagine: Vision Transformer (ViT)
         self.image_encoder = ViTModel.from_pretrained("google/vit-base-patch16-224-in21k")
