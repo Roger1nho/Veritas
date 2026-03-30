@@ -1,0 +1,11 @@
+# Ignoră imaginile din dataset-uri
+benchmark_data/
+data/real/
+data/fake/
+
+# Ignoră venv-urile
+venv/
+
+# Ignoră cache Python
+__pycache__/
+*.pyc
