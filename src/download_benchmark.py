@@ -1,197 +1,197 @@
 """
-prepare_benchmark.py
-====================
-Transformă CSV-urile FakeNewsNet (politifact / gossipcop) în formatul
-benchmark_index.csv cerut de VeritasDataset.
+prepare_benchmark_figshare.py
+==============================
+Pregătește benchmark_index.csv din dataset-ul Figshare (fakeddit_subset).
 
-Folosește TITLUL articolului ca text și încearcă să descarce imaginea
-principală de la news_url. Dacă imaginea nu e accesibilă, salvează o
-imagine placeholder albă și continuă.
-
-Rulare:
-    python prepare_benchmark.py
+Structura așteptată:
+    C:\\Veritas\\figshare\\fakeddit_subset\\
+        image_folder\\          <- imagini training
+        validation_image\\      <- imagini validare
+        training_data_fakeddit.jsonl
+        validation_data_fakeddit.jsonl
 
 Output:
-    C:\\Veritas\\benchmark_data\\benchmark_index.csv
     C:\\Veritas\\benchmark_data\\real\\*.jpg
     C:\\Veritas\\benchmark_data\\fake\\*.jpg
+    C:\\Veritas\\benchmark_data\\benchmark_index.csv
+
+Rulare:
+    python prepare_benchmark_figshare.py
 """
 
 import os
-import time
-import requests
-import pandas as pd
-from PIL import Image
-from io import BytesIO
+import json
+import shutil
+import re
+from pathlib import Path
 
-# ── Configurare ──────────────────────────────────────────────────────────────
+# ── Configurare — schimbă dacă ai dezarhivat altundeva ───────────────────────
 
-# Pune aici calea unde ai salvat cele 4 CSV-uri descărcate
-CSV_DIR = r"C:\Veritas"
-
-# Unde se creează dataset-ul benchmark
+FIGSHARE_DIR  = r"C:\Veritas\figshare\fakeddit_subset"
 BENCHMARK_DIR = r"C:\Veritas\benchmark_data"
+MAX_PER_CLASS = 4000   # 4000 real + 4000 fake = 8000 total
 
-# Câte articole iei din fiecare sursă (None = toate)
-# Recomandat: 300 per clasă ca să fie echilibrat și rapid de antrenat
-MAX_PER_CLASS = 300
-
-HEADERS = {
-    "User-Agent": (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/120.0.0.0 Safari/537.36"
-    )
-}
-
-# ── Inițializare foldere ─────────────────────────────────────────────────────
+# ── Creare foldere output ─────────────────────────────────────────────────────
 
 os.makedirs(os.path.join(BENCHMARK_DIR, "real"), exist_ok=True)
 os.makedirs(os.path.join(BENCHMARK_DIR, "fake"), exist_ok=True)
 
 
-def make_placeholder(path):
-    """Salvează o imagine albă 224x224 ca placeholder."""
-    img = Image.new("RGB", (224, 224), color=(200, 200, 200))
-    img.save(path)
-
-
-def download_image(url, save_path, timeout=6):
+def extract_filename(file_uri):
     """
-    Încearcă să descarce imaginea principală de la URL.
-    Strategii:
-      1. Caută og:image în meta tag-uri
-      2. Prima imagine din pagină
-      3. Placeholder dacă nimic nu merge
-    Returnează True dacă a reușit.
+    Extrage numele fișierului din URI de tipul:
+    gs://my_trial_bucket_finetune/image_folder/9a46c1362ec06f0ffbd2578fa777ea8d.jpg
     """
-    try:
-        resp = requests.get(url, headers=HEADERS, timeout=timeout)
-        resp.raise_for_status()
-        content_type = resp.headers.get("Content-Type", "")
-
-        # Dacă URL-ul e direct o imagine
-        if "image" in content_type:
-            img = Image.open(BytesIO(resp.content)).convert("RGB")
-            img.save(save_path)
-            return True
-
-        # Altfel parsăm HTML-ul după og:image
-        from html.parser import HTMLParser
-
-        class MetaParser(HTMLParser):
-            def __init__(self):
-                super().__init__()
-                self.og_image = None
-
-            def handle_starttag(self, tag, attrs):
-                if tag == "meta":
-                    attrs_dict = dict(attrs)
-                    if attrs_dict.get("property") == "og:image":
-                        self.og_image = attrs_dict.get("content")
-
-        parser = MetaParser()
-        parser.feed(resp.text[:50000])  # primii 50k chars, suficient pt header
-
-        if parser.og_image and parser.og_image.startswith("http"):
-            img_resp = requests.get(parser.og_image, headers=HEADERS, timeout=timeout)
-            img_resp.raise_for_status()
-            img = Image.open(BytesIO(img_resp.content)).convert("RGB")
-            img.save(save_path)
-            return True
-
-    except Exception:
-        pass
-
-    make_placeholder(save_path)
-    return False
+    return Path(file_uri).name
 
 
-def process_df(df, label, prefix, max_items):
+def parse_jsonl(jsonl_path, image_dir):
     """
-    Procesează un DataFrame FakeNewsNet și returnează lista de înregistrări.
-    label: 0 = real, 1 = fake
-    prefix: 'politifact' sau 'gossipcop'
+    Parsează un fișier JSONL și returnează lista de înregistrări:
+    [{"text": ..., "label": 0/1, "image_path": ...}, ...]
     """
-    folder_name = "real" if label == 0 else "fake"
     records = []
-    df = df.dropna(subset=["title", "news_url"])
 
-    if max_items:
-        df = df.head(max_items)
+    with open(jsonl_path, "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
 
-    total = len(df)
-    print(f"\n{'─'*55}")
-    print(f"  [{prefix.upper()} | {folder_name.upper()}] {total} articole de procesat")
-    print(f"{'─'*55}")
+            try:
+                obj = json.loads(line)
+                contents = obj.get("contents", [])
 
-    for i, (_, row) in enumerate(df.iterrows(), 1):
-        text = str(row["title"]).strip()
-        url = str(row["news_url"]).strip()
-        if not url.startswith("http"):
-            url = "https://" + url
+                # Extragem textul și imaginea din mesajul user
+                user_parts = contents[0]["parts"]
+                model_answer = contents[1]["parts"][0]["text"].strip()
 
-        filename = f"{prefix}_{folder_name}_{i}.jpg"
-        save_path = os.path.join(BENCHMARK_DIR, folder_name, filename)
+                # Labelul: "Yes" = fake (1), "No" = real (0)
+                label = 1 if model_answer == "Yes" else 0
 
-        ok = download_image(url, save_path)
-        status = "✅" if ok else "⬜"  # ⬜ = placeholder
+                # Extragem titlul din text
+                text_part = next(
+                    (p["text"] for p in user_parts if "text" in p), ""
+                )
+                # Titlul e între ghilimele după "Title:"
+                match = re.search(r'Title:"([^"]+)"', text_part)
+                title = match.group(1) if match else text_part[:100]
 
-        print(f"  {status} [{i:>4}/{total}] {text[:60]}")
+                # Extragem numele imaginii
+                file_part = next(
+                    (p for p in user_parts if "fileData" in p), None
+                )
+                if not file_part:
+                    continue
 
-        records.append({
-            "text": text,
-            "filename": filename,
-            "folder": folder_name,
-            "label": label,
-        })
+                img_filename = extract_filename(
+                    file_part["fileData"]["fileUri"]
+                )
+                img_path = os.path.join(image_dir, img_filename)
 
-        time.sleep(0.3)  # politicos cu serverele
+                if not os.path.exists(img_path):
+                    continue   # sărind dacă imaginea nu există local
+
+                records.append({
+                    "text":       title,
+                    "label":      label,
+                    "image_path": img_path,
+                    "img_filename": img_filename,
+                })
+
+            except Exception:
+                continue
 
     return records
 
 
 def main():
     print("=" * 55)
-    print("  VERITAS – Pregătire Dataset Benchmark FakeNewsNet")
+    print("  VERITAS – Benchmark Figshare (Fakeddit subset)")
     print("=" * 55)
 
-    # ── Citire CSV-uri ────────────────────────────────────────────────────────
-    pf_real = pd.read_csv(os.path.join(CSV_DIR, "politifact_real.csv"))
-    pf_fake = pd.read_csv(os.path.join(CSV_DIR, "politifact_fake.csv"))
-    gc_real = pd.read_csv(os.path.join(CSV_DIR, "gossipcop_real.csv"))
-    gc_fake = pd.read_csv(os.path.join(CSV_DIR, "gossipcop_fake.csv"))
+    # Căi fișiere
+    train_jsonl  = os.path.join(FIGSHARE_DIR, "training_data_fakeddit.jsonl")
+    val_jsonl    = os.path.join(FIGSHARE_DIR, "validation_data_fakeddit.jsonl")
+    train_imgdir = os.path.join(FIGSHARE_DIR, "image_folder")
+    val_imgdir   = os.path.join(FIGSHARE_DIR, "validation_image")
 
-    print(f"\nDate găsite:")
-    print(f"  PolitiFact real : {len(pf_real):>6} articole")
-    print(f"  PolitiFact fake : {len(pf_fake):>6} articole")
-    print(f"  GossipCop real  : {len(gc_real):>6} articole")
-    print(f"  GossipCop fake  : {len(gc_fake):>6} articole")
+    # Verificare
+    for p in [train_jsonl, val_jsonl, train_imgdir, val_imgdir]:
+        if not os.path.exists(p):
+            print(f"❌ Nu găsesc: {p}")
+            print(f"   Verifică că FIGSHARE_DIR e setat corect.")
+            return
 
-    max_pf = MAX_PER_CLASS // 2  # jumătate din buget pentru PolitiFact
-    max_gc = MAX_PER_CLASS // 2  # jumătate pentru GossipCop
-
+    # Parsare ambele fișiere JSONL
+    print("\n📂 Parsare JSONL-uri...")
     all_records = []
-    all_records += process_df(pf_real, label=0, prefix="politifact", max_items=max_pf)
-    all_records += process_df(pf_fake, label=1, prefix="politifact", max_items=max_pf)
-    all_records += process_df(gc_real, label=0, prefix="gossipcop",  max_items=max_gc)
-    all_records += process_df(gc_fake, label=1, prefix="gossipcop",  max_items=max_gc)
+    all_records += parse_jsonl(train_jsonl, train_imgdir)
+    all_records += parse_jsonl(val_jsonl,   val_imgdir)
 
-    # ── Salvare index ─────────────────────────────────────────────────────────
-    df_out = pd.DataFrame(all_records)
+    real_all = [r for r in all_records if r["label"] == 0]
+    fake_all = [r for r in all_records if r["label"] == 1]
+
+    print(f"   Total parsate : {len(all_records)}")
+    print(f"   Real          : {len(real_all)}")
+    print(f"   Fake          : {len(fake_all)}")
+
+    # Selectăm MAX_PER_CLASS din fiecare
+    real_selected = real_all[:MAX_PER_CLASS]
+    fake_selected = fake_all[:MAX_PER_CLASS]
+
+    print(f"\n✅ Selectate pentru benchmark:")
+    print(f"   Real : {len(real_selected)}")
+    print(f"   Fake : {len(fake_selected)}")
+
+    # Copiem imaginile și construim index
+    import pandas as pd
+    index_records = []
+
+    print(f"\n📋 Copiere imagini...")
+
+    for label_name, subset, label_int in [
+        ("real", real_selected, 0),
+        ("fake", fake_selected, 1)
+    ]:
+        print(f"  [{label_name.upper()}]")
+        for i, rec in enumerate(subset, 1):
+            dst_filename = f"fakeddit_{label_name}_{i}.jpg"
+            dst_path     = os.path.join(BENCHMARK_DIR, label_name, dst_filename)
+
+            try:
+                shutil.copy2(rec["image_path"], dst_path)
+                status = "✅"
+            except Exception as e:
+                print(f"    ❌ Eroare la {rec['img_filename']}: {e}")
+                status = "❌"
+                continue
+
+            if i % 50 == 0 or i == len(subset):
+                print(f"    {status} {i}/{len(subset)} copiate")
+
+            index_records.append({
+                "text":     rec["text"],
+                "filename": dst_filename,
+                "folder":   label_name,
+                "label":    label_int,
+            })
+
+    # Salvare CSV
+    df_out   = pd.DataFrame(index_records)
     out_path = os.path.join(BENCHMARK_DIR, "benchmark_index.csv")
     df_out.to_csv(out_path, index=False)
 
     real_count = (df_out["label"] == 0).sum()
     fake_count = (df_out["label"] == 1).sum()
 
-    print("\n" + "=" * 55)
-    print("  GATA!")
-    print(f"  Total înregistrări : {len(df_out)}")
-    print(f"  Real               : {real_count}")
-    print(f"  Fake               : {fake_count}")
-    print(f"  Index salvat în    : {out_path}")
-    print("=" * 55)
+    print(f"\n{'='*55}")
+    print(f"  GATA!")
+    print(f"  Total          : {len(df_out)}")
+    print(f"  Real           : {real_count}")
+    print(f"  Fake           : {fake_count}")
+    print(f"  Index salvat în: {out_path}")
+    print(f"{'='*55}")
     print("\nPasul următor: rulează benchmark_train.py")
 
 

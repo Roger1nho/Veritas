@@ -218,7 +218,7 @@ def train():
     print(f"\n{'='*55}")
     print(f"  RAPORT FINAL – pentru licență")
     print(f"{'='*55}")
-    print(f"  Dataset     : FakeNewsNet (PolitiFact + GossipCop)")
+    print(f"  Dataset     : Fakeddit subset (Figshare)")
     print(f"  Arhitectură : BERT-base-uncased + ViT + Gated Fusion")
     print(f"  Epoci       : {EPOCHS}")
     print(f"  Best Val Acc: {best_val_acc:.2%}")
