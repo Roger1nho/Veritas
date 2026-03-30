@@ -2,7 +2,7 @@
 benchmark_train.py
 ==================
 Antrenează și evaluează arhitectura multimodală (BERT-en + ViT) pe
-dataset-ul FakeNewsNet (PolitiFact + GossipCop) pentru a valida că
+dataset-ul FakeNewsNet (PolitiFact + GossipCop) / Fakeddit pentru a valida că
 arhitectura Veritas funcționează și pe date internaționale de referință.
 
 Rezultatele obținute aici se compară în licență cu modelul principal
@@ -20,6 +20,7 @@ from torch.utils.data import DataLoader, random_split
 from torch.nn import CrossEntropyLoss
 from tqdm import tqdm
 from transformers import AutoTokenizer, ViTImageProcessor, AutoModel, ViTModel
+import matplotlib.pyplot as plt # <-- Import nou pentru grafice
 from dataset import VeritasDataset  # Același dataset, alt CSV
 
 # ── Configurare ───────────────────────────────────────────────────────────────
@@ -235,7 +236,43 @@ def train():
         )
     print(f"{'='*55}")
     print(f"\n✅ Model salvat în: {MODEL_SAVE}")
-    print("   Pasul următor: compară aceste rezultate cu modelul român în licență.")
+
+    # ── Generare Grafice (NOU) ────────────────────────────────────────────────
+    print("\n📈 Generare grafice de antrenare...")
+
+    # Extragem listele direct din dictionarul 'history'
+    epochs_range    = [h['epoch'] for h in history]
+    train_loss_list = [h['loss'] for h in history]
+    train_acc_list  = [h['train_acc'] for h in history]
+    val_acc_list    = [h['val_acc'] for h in history]
+
+    plt.figure(figsize=(12, 5))
+
+    # Grafic 1: Pierderea (Loss)
+    plt.subplot(1, 2, 1)
+    plt.plot(epochs_range, train_loss_list, marker='o', color='red', label='Train Loss')
+    plt.title('Evoluția Pierderii (Loss) pe Benchmark')
+    plt.xlabel('Epoca')
+    plt.ylabel('Loss')
+    plt.xticks(epochs_range)  # Forțăm axa X să arate doar numere întregi (1, 2, 3...)
+    plt.grid(True, linestyle='--', alpha=0.7)
+    plt.legend()
+
+    # Grafic 2: Acuratețea (Accuracy)
+    plt.subplot(1, 2, 2)
+    plt.plot(epochs_range, train_acc_list, marker='o', color='blue', label='Train Accuracy')
+    plt.plot(epochs_range, val_acc_list, marker='o', color='green', label='Validation Accuracy')
+    plt.title('Evoluția Acurateței pe Benchmark')
+    plt.xlabel('Epoca')
+    plt.ylabel('Acuratețe')
+    plt.xticks(epochs_range)
+    plt.grid(True, linestyle='--', alpha=0.7)
+    plt.legend()
+
+    plt.tight_layout()
+    plt.savefig('benchmark_learning_curves.png', dpi=300)
+    print("✅ Graficele au fost salvate cu succes în 'benchmark_learning_curves.png'")
+    print("   Pasul următor: pune graficele în lucrare și compară-le cu modelul românesc.")
 
 
 if __name__ == "__main__":

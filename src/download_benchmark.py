@@ -29,7 +29,7 @@ from pathlib import Path
 
 FIGSHARE_DIR  = r"C:\Veritas\figshare\fakeddit_subset"
 BENCHMARK_DIR = r"C:\Veritas\benchmark_data"
-MAX_PER_CLASS = 4000   # 4000 real + 4000 fake = 8000 total
+MAX_PER_CLASS = 2000   # 4000 real + 4000 fake = 8000 total
 
 # ── Creare foldere output ─────────────────────────────────────────────────────
 
