@@ -1,0 +1,59 @@
+C:\Veritas\venv311\Scripts\python.exe C:\Veritas\src\train_benchmark.py
+=======================================================
+  VERITAS – Benchmark FakeNewsNet
+  Device : CPU
+=======================================================
+
+⏳ Încărcare modele pre-antrenate (engleză)...
+C:\Veritas\venv311\Lib\site-packages\torch\cuda\__init__.py:129: UserWarning: CUDA initialization: The NVIDIA driver on your system is too old (found version 10010). Please update your GPU driver by downloading and installing a new version from the URL: http://www.nvidia.com/Download/index.aspx Alternatively, go to: https://pytorch.org to install a PyTorch version that has been compiled with your version of the CUDA driver. (Triggered internally at C:\actions-runner\_work\pytorch\pytorch\builder\windows\pytorch\c10\cuda\CUDAFunctions.cpp:108.)
+  return torch._C._cuda_getDeviceCount() > 0
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+✅ Date: 4000 total (3200 train / 800 val)
+
+Loading weights: 100%|██████████| 199/199 [00:00<00:00, 4974.26it/s]
+BertModel LOAD REPORT from: bert-base-uncased
+Key                                        | Status     |  |
+-------------------------------------------+------------+--+-
+cls.predictions.transform.dense.weight     | UNEXPECTED |  |
+cls.predictions.transform.LayerNorm.bias   | UNEXPECTED |  |
+cls.seq_relationship.weight                | UNEXPECTED |  |
+cls.predictions.bias                       | UNEXPECTED |  |
+cls.seq_relationship.bias                  | UNEXPECTED |  |
+cls.predictions.transform.LayerNorm.weight | UNEXPECTED |  |
+cls.predictions.transform.dense.bias       | UNEXPECTED |  |
+
+Notes:
+- UNEXPECTED:	can be ignored when loading from different task/architecture; not ok if you expect identical arch.
+Loading weights: 100%|██████████| 200/200 [00:00<00:00, 4444.37it/s]
+Epoca 1/3: 100%|██████████| 800/800 [1:20:00<00:00,  6.00s/it, loss=0.2397]
+📊 Epoca 1: Loss=0.5581 | Train=70.38% | Val=76.38% | Pondere imagine (z̄)=0.644
+   💾 Model salvat (val_acc=76.38%)
+Epoca 2/3: 100%|██████████| 800/800 [1:13:43<00:00,  5.53s/it, loss=0.4339]
+📊 Epoca 2: Loss=0.3240 | Train=86.19% | Val=79.75% | Pondere imagine (z̄)=0.775
+Epoca 3/3:   0%|          | 0/800 [00:00<?, ?it/s]   💾 Model salvat (val_acc=79.75%)
+Epoca 3/3: 100%|██████████| 800/800 [1:10:19<00:00,  5.27s/it, loss=0.0190]
+📊 Epoca 3: Loss=0.1236 | Train=95.97% | Val=78.88% | Pondere imagine (z̄)=0.863
+
+=======================================================
+  RAPORT FINAL – pentru licență
+=======================================================
+  Dataset     : Fakeddit subset (Figshare)
+  Arhitectură : BERT-base-uncased + ViT + Gated Fusion
+  Epoci       : 3
+  Best Val Acc: 79.75%
+
+  Detaliu pe epoci:
+   Epocă     Loss    Train      Val   z̄ img
+  ──────────────────────────────────────────
+       1   0.5581   70.38%   76.38%    0.644
+       2   0.3240   86.19%   79.75%    0.775
+       3   0.1236   95.97%   78.88%    0.863
+=======================================================
+
+✅ Model salvat în: C:\Veritas\benchmark_model.pth
+
+📈 Generare grafice de antrenare...
+✅ Graficele au fost salvate cu succes în 'benchmark_learning_curves.png'
+   Pasul următor: pune graficele în lucrare și compară-le cu modelul românesc.
+
+Process finished with exit code 0
