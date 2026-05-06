@@ -3,3 +3,5 @@ torch
 torchvision
 transformers
 Pillow
+beautifulsoup4
+requests
