@@ -15,7 +15,6 @@ import plotly.graph_objects as go
 import plotly.express as px
 import pandas as pd
 import os
-import gdown
 
 
 st.set_page_config(
@@ -25,16 +24,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-model_path = "src/veritas_model.pth"
-# Verifică te rog dacă acel "_" de la final face parte cu adevărat din ID, e cam neobișnuit.
-file_id = "1oBTuNksGw6RcTA8O_rR8Gk2tzlSUbqj_"
-
-if not os.path.exists(model_path):
-    # Folosim st.spinner ca să vadă utilizatorul de ce durează la prima pornire
-    with st.spinner("Serverul descarcă modelul AI (procesul durează ~1-2 minute la prima rulare)..."):
-        # Folosim id= (nu url=) pentru a trece peste avertismentul de virus scan al Google
-        gdown.download(id=file_id, output=model_path, quiet=False)
-
+MODEL_PATH = "src/veritas_model.pth"
 # Apoi continui codul tau normal...
 # model.load_state_dict(torch.load(model_path, map_location=torch.device('cpu')))
 
@@ -304,7 +294,6 @@ except ImportError:
     st.error("❌ Nu găsesc `src/fusion_model.py`.")
     st.stop()
 
-MODEL_PATH = "src/veritas_model.pth"
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 
