@@ -25,7 +25,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-model_path = "veritas_model.pth"
+model_path = "Veritas\\src\\veritas_model.pth"
 # Verifică te rog dacă acel "_" de la final face parte cu adevărat din ID, e cam neobișnuit.
 file_id = "1oBTuNksGw6RcTA8O_rR8Gk2tzlSUbqj_"
 
