@@ -7,3 +7,7 @@ beautifulsoup4
 requests
 trafilatura
 FPDF
+plotly
+numpy
+pandas
+lxml
