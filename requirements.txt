@@ -11,3 +11,4 @@ plotly
 numpy
 pandas
 lxml
+gdown

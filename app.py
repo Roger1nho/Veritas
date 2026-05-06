@@ -14,6 +14,21 @@ import datetime
 import plotly.graph_objects as go
 import plotly.express as px
 import pandas as pd
+import os
+import gdown
+
+model_path = "veritas_model.pth"
+# ID-ul extras de tine din linkul de Google Drive
+file_id = "1oBTuNkS0w6RcTA8O_rR80K2tz1SUbqj_"
+
+# Daca modelul nu exista deja descarcat pe serverul Streamlit, il descarca
+if not os.path.exists(model_path):
+    print("Descarc modelul de pe Google Drive...")
+    url = f'https://drive.google.com/uc?id={file_id}'
+    gdown.download(url, model_path, quiet=False)
+
+# Apoi continui codul tau normal...
+# model.load_state_dict(torch.load(model_path, map_location=torch.device('cpu')))
 
 # ─────────────────────────────────────────────
 # CONFIG PAGINĂ
