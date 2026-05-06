@@ -17,15 +17,23 @@ import pandas as pd
 import os
 import gdown
 
-model_path = "veritas_model.pth"
-# ID-ul extras de tine din linkul de Google Drive
-file_id = "1oBTuNkS0w6RcTA8O_rR80K2tz1SUbqj_"
 
-# Daca modelul nu exista deja descarcat pe serverul Streamlit, il descarca
+st.set_page_config(
+    page_title="Veritas — Detector Fake News",
+    page_icon="🕵️",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+model_path = "veritas_model.pth"
+# Verifică te rog dacă acel "_" de la final face parte cu adevărat din ID, e cam neobișnuit.
+file_id = "1oBTuNksGw6RcTA8O_rR8Gk2tzlSUbqj_"
+
 if not os.path.exists(model_path):
-    print("Descarc modelul de pe Google Drive...")
-    url = f'https://drive.google.com/uc?id={file_id}'
-    gdown.download(url, model_path, quiet=False)
+    # Folosim st.spinner ca să vadă utilizatorul de ce durează la prima pornire
+    with st.spinner("Serverul descarcă modelul AI (procesul durează ~1-2 minute la prima rulare)..."):
+        # Folosim id= (nu url=) pentru a trece peste avertismentul de virus scan al Google
+        gdown.download(id=file_id, output=model_path, quiet=False)
 
 # Apoi continui codul tau normal...
 # model.load_state_dict(torch.load(model_path, map_location=torch.device('cpu')))
@@ -33,12 +41,7 @@ if not os.path.exists(model_path):
 # ─────────────────────────────────────────────
 # CONFIG PAGINĂ
 # ─────────────────────────────────────────────
-st.set_page_config(
-    page_title="Veritas — Detector Fake News",
-    page_icon="🕵️",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
+
 
 # ─────────────────────────────────────────────
 # CSS GLOBAL — temă dark, tipografie, carduri
