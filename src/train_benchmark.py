@@ -20,7 +20,7 @@ from torch.utils.data import DataLoader, random_split
 from torch.nn import CrossEntropyLoss
 from tqdm import tqdm
 from transformers import AutoTokenizer, ViTImageProcessor, AutoModel, ViTModel
-import matplotlib.pyplot as plt # <-- Import nou pentru grafice
+import matplotlib.pyplot as plt # <-- Import pentru grafice
 from dataset import VeritasDataset  # Același dataset, alt CSV
 
 # ── Configurare ───────────────────────────────────────────────────────────────
@@ -158,6 +158,14 @@ def train():
 
             logits, z = model(input_ids, attention_mask, pixel_values)
             loss      = criterion(logits, labels)
+
+            # =================================================================
+            # FIX 1: REGULARIZAREA L1 PE POARTA Z
+            # Adăugăm o penalizare pentru valori ridicate ale lui z.
+            # Astfel combatem Shortcut Learning-ul.
+            gate_penalty = 0.03 * z.mean()
+            loss = loss + gate_penalty
+            # =================================================================
 
             loss.backward()
             optimizer.step()

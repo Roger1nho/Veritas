@@ -21,12 +21,12 @@ DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 def train():
     print(f"🚀 Pornire antrenare pe: {DEVICE.upper()}")
 
-    #Încărcare Tokenizer și Procesor
+    # Încărcare Tokenizer și Procesor
     print("⏳ Încărcare modele pre-antrenate...")
     tokenizer = AutoTokenizer.from_pretrained("dumitrescustefan/bert-base-romanian-cased-v1")
     image_processor = ViTImageProcessor.from_pretrained("google/vit-base-patch16-224-in21k")
 
-    #Încărcare Dataset
+    # Încărcare Dataset
     full_dataset = VeritasDataset(
         csv_file=CSV_PATH,
         root_dir=BASE_DIR,
@@ -45,14 +45,14 @@ def train():
 
     print(f"✅ Date încărcate: {len(full_dataset)} total ({len(train_dataset)} Train, {len(val_dataset)} Val)")
 
-    #Inițializare Model
+    # Inițializare Model
     model = MultimodalFakeNewsModel(num_labels=2)
     model.to(DEVICE)
 
     optimizer = AdamW(model.parameters(), lr=LEARNING_RATE)
     criterion = CrossEntropyLoss()
 
-    #Bucla de Antrenare
+    # Bucla de Antrenare
     for epoch in range(EPOCHS):
         model.train()
         total_loss = 0
@@ -70,8 +70,19 @@ def train():
 
             # Forward
             optimizer.zero_grad()
-            outputs = model(input_ids, attention_mask, pixel_values)
-            loss = criterion(outputs, labels)
+
+            # --- MODIFICARE AICI: Extragem logits (scorul final) și z (ponderea imaginii) ---
+            logits, z = model(input_ids, attention_mask, pixel_values)
+
+            # Calculăm eroarea standard pe predicții
+            loss = criterion(logits, labels)
+
+            # =================================================================
+            # FIX 1: REGULARIZAREA L1 PE POARTA Z (Taxa pe Shortcut Learning)
+            # Penalizăm modelul dacă z este prea mare (tinde să ignore textul)
+            gate_penalty = 0.03 * z.mean()
+            loss = loss + gate_penalty
+            # =================================================================
 
             # Backward
             loss.backward()
@@ -80,13 +91,13 @@ def train():
             total_loss += loss.item()
 
             # Calcul acuratețe antrenare
-            preds = torch.argmax(outputs, dim=1)
+            preds = torch.argmax(logits, dim=1)
             correct_train += (preds == labels).sum().item()
             total_train += labels.size(0)
 
             loop.set_postfix(loss=loss.item())
 
-        #Validare (Testăm pe datele nevăzute)
+        # Validare (Testăm pe datele nevăzute)
         model.eval()
         correct_val = 0
         total_val = 0
@@ -98,8 +109,9 @@ def train():
                 pixel_values = batch['pixel_values'].to(DEVICE)
                 labels = batch['labels'].to(DEVICE)
 
-                outputs = model(input_ids, attention_mask, pixel_values)
-                preds = torch.argmax(outputs, dim=1)
+                # În validare, nu ne interesează poarta 'z' pentru antrenament, luăm doar predicțiile
+                logits, _ = model(input_ids, attention_mask, pixel_values)
+                preds = torch.argmax(logits, dim=1)
 
                 correct_val += (preds == labels).sum().item()
                 total_val += labels.size(0)
@@ -110,7 +122,7 @@ def train():
         print(
             f"📊 Epoca {epoch + 1}: Loss={total_loss / len(train_loader):.4f} | Train Acc={train_acc:.2%} | Val Acc={val_acc:.2%}")
 
-    #Salvare
+    # Salvare
     print(f"💾 Salvare model în {MODEL_SAVE_PATH}...")
     torch.save(model.state_dict(), MODEL_SAVE_PATH)
     print("🎉 Antrenare completă!")
